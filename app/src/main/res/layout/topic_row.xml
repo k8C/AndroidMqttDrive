@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="86dp"
+    android:descendantFocusability="blocksDescendants">
+
+    <View
+        android:id="@+id/status"
+        android:layout_width="9dp"
+        android:layout_height="9dp"
+        android:layout_marginEnd="6dp"
+        android:layout_marginStart="6dp"
+        android:layout_marginTop="13.5dp"
+        android:background="#cc0000" />
+
+    <TextView
+        android:id="@+id/topic"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_toEndOf="@id/status"
+        android:text="abc/feeds/temp"
+        android:textSize="23dp"
+        android:textStyle="italic" />
+
+    <TextView
+        android:id="@+id/value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:text="1238597579"
+        android:textSize="34dp"
+        android:textStyle="bold" />
+
+    <ImageButton
+        android:id="@+id/gear"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true"
+        android:background="@null"
+        android:src="@drawable/setting"/>
+
+    <ToggleButton
+        android:id="@+id/bell"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_toStartOf="@id/gear"
+        android:background="@drawable/bell"
+        android:minHeight="0dp"
+        android:minWidth="0dp"
+        android:textOff="@null"
+        android:textOn="@null"/>
+
+    <ImageButton
+        android:id="@+id/arrow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_toStartOf="@id/bell"
+        android:background="@null"
+        android:src="@drawable/publish"/>
+</RelativeLayout>

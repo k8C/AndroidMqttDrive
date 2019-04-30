@@ -1,0 +1,10 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="project.thesis.vgu.mqtt.MainActivity">
+    <item
+        android:id="@+id/service_setting"
+        android:title="Background Notification"
+        app:showAsAction="never"
+        android:checkable="true"/>
+</menu>
