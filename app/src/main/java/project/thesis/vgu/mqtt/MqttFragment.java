@@ -195,9 +195,9 @@ public class MqttFragment extends Fragment {
             }.getType());
         else {
             Topic cond = new Topic(), ph = new Topic(), temp = new Topic();
-            cond.name = "monokia/f/cond";
-            ph.name = "monokia/f/ph";
-            temp.name = "monokia/f/temp";
+            cond.name = "k8C/f/cond";
+            ph.name = "k8C/f/ph";
+            temp.name = "k8C/f/temp";
             topics = new ArrayList<Topic>();
             topics.add(cond);
             topics.add(ph);
@@ -221,7 +221,7 @@ public class MqttFragment extends Fragment {
                 option.setAutomaticReconnect(true);
                 option.setMaxReconnectDelay(5);
                 option.setCleanSession(true);
-                option.setUserName("monokia");
+                option.setUserName("k8C");
                 option.setPassword("b19057d0daee4a4db05b4c0c1ed9166d".toCharArray());
                 try {
                     client = new MqttAsyncClient("tcp://io.adafruit.com:1883", "k8c53795cakn", null);
