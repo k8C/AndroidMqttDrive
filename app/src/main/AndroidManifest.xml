@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="project.thesis.vgu.mqtt">
+    package="project.thesis.vgu.mqtt" >
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -8,18 +8,19 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="true"
         android:icon="@drawable/app2"
         android:label="MQTT"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MaterialComponents.Light.NoActionBar">
+        android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" >
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|layoutDirection|fontScale|locale|uiMode|keyboard|screenLayout|smallestScreenSize|touchscreen|mcc|mnc|density|keyboardHidden|navigation"
             android:label="MQTT"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -28,9 +29,15 @@
         </activity>
 
         <!-- <service android:name="org.eclipse.paho.android.service.MqttService" /> -->
-        <service android:name=".MqttService"
-            android:process=":mqttService"/>
-        <receiver android:name=".NotificationReceiver" />
+        <service
+            android:name=".MqttService" />
+        <!--android:process=":mqttService"-->
+
+        <receiver android:name=".Receiver" >
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

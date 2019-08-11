@@ -37,9 +37,7 @@ import com.google.gson.reflect.TypeToken;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
-import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
@@ -56,9 +54,10 @@ public class MqttFragment extends Fragment {
     List<Topic> topics;
     TopicAdapter topicAdapter;
     TextView tv; // mqtt server connection status
-    MqttAsyncClient client;
+    //    MqttAsyncClient client;
     Handler handler;
     IMqttActionListener subscribeListener, unsubscribeListener, publishListener;
+    MqttCallbackExtended mqttCallback;
     boolean notifyInBackground; // Options Menu setting for MqttService
     Context context;
 
@@ -137,6 +136,7 @@ public class MqttFragment extends Fragment {
                         break;
                     case 7:
                         tv.setTextColor(0xff669900); //0xff669900,0xff99cc00 - red
+                        Log.e(MainActivity.TAG, "session present: " + MqttConnection.connectToken.getSessionPresent());
                         break;
                     case 8:
                         tv.setTextColor(0xffff4444); //0xffcc0000,0xffff4444 - green
@@ -177,6 +177,50 @@ public class MqttFragment extends Fragment {
                 handler.obtainMessage(6).sendToTarget();
             }
         };
+        mqttCallback = new MqttCallbackExtended() {
+            @Override
+            public void connectComplete(boolean reconnect, String serverURI) {
+                Log.e(MainActivity.TAG, "connectComplete");
+                handler.obtainMessage(7).sendToTarget(); // change status textview color to green
+                try {
+                    for (Topic topic : topics) // subscribe to all topics with isSubscribed = true
+                        if (topic.isSubscribed) {
+                            Log.e(MainActivity.TAG, "subscribe again");
+                            MqttConnection.client.subscribe(topic.name, 1, null, new IMqttActionListener() {
+                                @Override
+                                public void onSuccess(IMqttToken asyncActionToken) {
+                                }
+
+                                @Override
+                                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                                    handler.obtainMessage(2, asyncActionToken.getTopics()[0]).sendToTarget(); // topic status icon color red
+                                }
+                            });
+                        }
+                } catch (MqttException e) {
+                    Log.e(MainActivity.TAG, "subscribe mqttException: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void connectionLost(Throwable cause) {
+                handler.obtainMessage(8).sendToTarget(); // change status textview color to red
+                Log.e(MainActivity.TAG, "connectionLost");
+                MqttConnection.connect();
+            }
+
+            @Override
+            public void messageArrived(String topic, MqttMessage message) throws Exception {
+                handler.obtainMessage(0, new String[]{topic, message.toString()}).sendToTarget();
+                Log.e(MainActivity.TAG, topic + ": " + message);
+            }
+
+            @Override
+            public void deliveryComplete(IMqttDeliveryToken token) {
+                Log.e(MainActivity.TAG, "deliveryComplete");
+            }
+        };
     }
 
     @Override
@@ -215,113 +259,40 @@ public class MqttFragment extends Fragment {
     public void onStart() {
         super.onStart();
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
-        try {
-            if (client == null) { // first time connect
-                MqttConnectOptions option = new MqttConnectOptions();
-                option.setAutomaticReconnect(true);
-                option.setMaxReconnectDelay(5);
-                option.setCleanSession(true);
-                option.setUserName("k8C");
-                option.setPassword("b19057d0daee4a4db05b4c0c1ed9166d".toCharArray());
-                try {
-                    client = new MqttAsyncClient("tcp://io.adafruit.com:1883", "k8c53795cakn", null);
-                } catch (MqttException e) {
-                    Log.e(MainActivity.TAG, "constructor exception: " + e.getMessage());
-                    e.printStackTrace();
-                }
-                client.setCallback(new MqttCallbackExtended() {
-                    @Override
-                    public void connectComplete(boolean reconnect, String serverURI) {
-                        handler.obtainMessage(7).sendToTarget(); // change status textview color to green
-                        try {
-                            for (Topic topic : topics) // subscribe to all topics with isSubscribed = true
-                                if (topic.isSubscribed) {
-                                    Log.e(MainActivity.TAG, "subscribe again");
-                                    client.subscribe(topic.name, 1, null, new IMqttActionListener() {
-                                        @Override
-                                        public void onSuccess(IMqttToken asyncActionToken) {
-                                        }
-
-                                        @Override
-                                        public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                                            handler.obtainMessage(2, asyncActionToken.getTopics()[0]).sendToTarget(); // topic status icon color red
-                                        }
-                                    });
-                                }
-                        } catch (MqttException e) {
-                            Log.e(MainActivity.TAG, "subscribe mqttException: " + e.getMessage());
-                            e.printStackTrace();
-                        }
-                    }
-
-                    @Override
-                    public void connectionLost(Throwable cause) {
-                        handler.obtainMessage(8).sendToTarget(); // change status textview color to red
-                    }
-
-                    @Override
-                    public void messageArrived(String topic, MqttMessage message) throws Exception {
-                        handler.obtainMessage(0, new String[]{topic, message.toString()}).sendToTarget();
-                        Log.e(MainActivity.TAG, topic + ": " + message);
-                    }
-
-                    @Override
-                    public void deliveryComplete(IMqttDeliveryToken token) {
-                        Log.e(MainActivity.TAG, "deliveryComplete");
-                    }
-                });
-                client.connect(option, null, new IMqttActionListener() {
-                    @Override
-                    public void onSuccess(IMqttToken asyncActionToken) {
-                        Log.e(MainActivity.TAG, "connect success");
-                    }
-
-                    @Override
-                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                        Log.e(MainActivity.TAG, "connect fail");
-                        try {
-                            client.reconnect();
-                        } catch (MqttException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
-            } else client.reconnect(); // if has already been connected once, reconnect
-        } catch (MqttException e) {
-            Log.e(MainActivity.TAG, "onStart connect exception");
-            e.printStackTrace();
-        }
+        MqttConnection.initialize();
+//                option.setAutomaticReconnect(false);
+//                option.setMaxReconnectDelay(5);
+        MqttConnection.client.setCallback(mqttCallback);
+        //else client.reconnect(); // if has already been connected once, reconnect
+//                connectToken = client.connect(option, null, connectListener);
+        MqttConnection.connect();
     }
 
     @Override
     public void onStop() {
         Log.e(MainActivity.TAG, "MqttFragment onStop");
-        try {
-            client.disconnect(0, null, null);
-        } catch (MqttException e) {
-            Log.e(MainActivity.TAG, "onStop disconnect exception");
-            e.printStackTrace();
-        }
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).unregisterNetworkCallback(connectionCallback);
         PreferenceManager.getDefaultSharedPreferences(context).edit().putString("topics", new Gson().toJson(topics)).apply();
-        if (notifyInBackground) for (Topic topic : topics)
-            if (topic.notify) {
-                if (MainActivity.atLeastOreo) // start ForeGround service in android Oreo and above
-                    context.startForegroundService(new Intent(context, MqttService.class));
-                else context.startService(new Intent(context, MqttService.class));
-                break;
-            }
+        if (notifyInBackground) {
+            for (Topic topic : topics)
+                if (topic.notify) {
+                    if (MainActivity.atLeastOreo) // start ForeGround service in android Oreo and above
+                        context.startForegroundService(new Intent(context, MqttService.class));
+                    else context.startService(new Intent(context, MqttService.class));
+                    break;
+                }
+        } else {
+            MqttConnection.client.setCallback(null);
+            MqttConnection.disconnect();
+        }
         super.onStop();
     }
 
     @Override
     public void onDestroy() {
-        try {
-            client.close(true); // release all resources related to the activity context to avoid memory leak
-        } catch (MqttException e) {
-            Log.e(MainActivity.TAG, "onDestroy close exception");
-            e.printStackTrace();
-        }
+        publishListener = null;
+        subscribeListener = null;
+        unsubscribeListener = null;
         super.onDestroy();
     }
 
@@ -336,7 +307,7 @@ public class MqttFragment extends Fragment {
         switch (item.getItemId()) {
             case R.id.subscribe:
                 try {
-                    client.subscribe(topics.get(position).name, 1, null, subscribeListener);
+                    MqttConnection.client.subscribe(topics.get(position).name, 1, null, subscribeListener);
                 } catch (MqttException e) {
                     Log.e(MainActivity.TAG, "subscribe exception");
                     e.printStackTrace();
@@ -344,7 +315,7 @@ public class MqttFragment extends Fragment {
                 break;
             case R.id.unsubscribe:
                 try {
-                    client.unsubscribe(topics.get(position).name, null, unsubscribeListener);
+                    MqttConnection.client.unsubscribe(topics.get(position).name, null, unsubscribeListener);
                 } catch (MqttException e) {
                     Log.e(MainActivity.TAG, "unsubscribe exception");
                     e.printStackTrace();
@@ -418,7 +389,7 @@ public class MqttFragment extends Fragment {
                                     @Override
                                     public void onClick(DialogInterface dialog, int which) {
                                         try {
-                                            client.publish(topics.get(number).name, ((EditText) publishDialog.findViewById(R.id.publishText)).getText().toString().getBytes(), 1, ((CheckBox) publishDialog.findViewById(R.id.retain)).isChecked(), null, publishListener);
+                                            MqttConnection.client.publish(topics.get(number).name, ((EditText) publishDialog.findViewById(R.id.publishText)).getText().toString().getBytes(), 1, ((CheckBox) publishDialog.findViewById(R.id.retain)).isChecked(), null, publishListener);
                                         } catch (MqttException e) {
                                             Log.e(MainActivity.TAG, "publish exception");
                                             e.printStackTrace();

@@ -26,10 +26,10 @@ repositories {
     }
 }
 dependencies {
-    compile ('androidx.appcompat:appcompat:1.0.0') {
+    compile('androidx.appcompat:appcompat:1.0.0') {
         exclude group: 'androidx.vectordrawable'
     }
-    compile ('com.google.android.material:material:1.0.0-rc01') {
+    compile('com.google.android.material:material:1.0.0-rc01') {
         exclude group: 'androidx.vectordrawable', module: 'vectordrawable-animated'
     }
     compile 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.1'
