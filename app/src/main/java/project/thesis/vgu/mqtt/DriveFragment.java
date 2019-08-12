@@ -214,8 +214,8 @@ public class DriveFragment extends androidx.fragment.app.Fragment {
         GraphView graph;
 
         public DataProcessingTask(TextView statusText, Button button) {
-            statusTextReference = new WeakReference<TextView>(statusText);
-            buttonReference = new WeakReference<Button>(button); // avoid memory leak when this task still run after the activity is destroyed
+            statusTextReference = new WeakReference<>(statusText);
+            buttonReference = new WeakReference<>(button); // avoid memory leak when this task still run after the activity is destroyed
             token = (String) statusText.getTag();
         }
 

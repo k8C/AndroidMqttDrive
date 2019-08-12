@@ -41,6 +41,7 @@ import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -55,8 +56,8 @@ public class MqttFragment extends Fragment {
     TopicAdapter topicAdapter;
     TextView tv; // mqtt server connection status
     //    MqttAsyncClient client;
-    Handler handler;
-    IMqttActionListener subscribeListener, unsubscribeListener, publishListener;
+    MqttConnection mqtt;
+    MainHandler handler;
     MqttCallbackExtended mqttCallback;
     boolean notifyInBackground; // Options Menu setting for MqttService
     Context context;
@@ -65,40 +66,33 @@ public class MqttFragment extends Fragment {
     public MqttFragment() {
     }
 
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        //setRetainInstance(true); //retain variables across configchanges, onCreate and onDestroy not called
-        Log.e(MainActivity.TAG, "MqttFragment onCreate");
-        context = getContext();
-        connectionCallback = new ConnectivityManager.NetworkCallback() {
-            boolean noConnection = false;
+    static class MainHandler extends Handler {
+        List<Topic> topics;
+        WeakReference<TopicAdapter> topicAdapterReference;
+        WeakReference<TextView> tvReference;
+        Context context;
 
-            @Override
-            public void onLost(Network network) {
-                Snackbar.make(getView(), "No Connection", Snackbar.LENGTH_INDEFINITE).show();
-                noConnection = true;
-            }
+        public MainHandler(List<Topic> tp, TopicAdapter ta, TextView tv, Context ct) {
+            topics = tp;
+            topicAdapterReference = new WeakReference<>(ta);
+            tvReference = new WeakReference<>(tv);
+            context = ct;
+        }
 
-            @Override
-            public void onAvailable(Network network) {
-                if (noConnection)
-                    Snackbar.make(getView(), "Connected", Snackbar.LENGTH_SHORT).show();
-                //client.connect;
-            }
-        };
-        handler = new Handler() {
-            void changeStatus(String topicName, boolean status) {
-                for (Topic topic : topics)
-                    if (topic.name.equals(topicName)) {
-                        topic.isSubscribed = status;
-                        topicAdapter.notifyDataSetChanged();
-                        break;
-                    }
-            }
+        void changeStatus(String topicName, boolean status) {
+            for (Topic topic : topics)
+                if (topic.name.equals(topicName)) {
+                    topic.isSubscribed = status;
+                    topicAdapterReference.get().notifyDataSetChanged();
+                    break;
+                }
+        }
 
-            @Override
-            public void handleMessage(Message msg) {
+        @Override
+        public void handleMessage(Message msg) {
+            TextView tv = tvReference.get();
+            if (tv != null) {
+                TopicAdapter topicAdapter = topicAdapterReference.get();
                 switch (msg.what) {
                     case 0:
                         String[] data = (String[]) msg.obj;
@@ -143,40 +137,34 @@ public class MqttFragment extends Fragment {
                         break;
                 }
             }
-        };
-        subscribeListener = new IMqttActionListener() {
+        }
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        //setRetainInstance(true); //retain variables across configchanges, onCreate and onDestroy not called
+        Log.e(MainActivity.TAG, "MqttFragment onCreate");
+        context = getContext();
+        connectionCallback = new ConnectivityManager.NetworkCallback() {
+            boolean noConnection = false;
+
             @Override
-            public void onSuccess(IMqttToken asyncActionToken) {
-                handler.obtainMessage(1, asyncActionToken.getTopics()[0]).sendToTarget();
+            public void onLost(Network network) {
+                Snackbar.make(getView(), "No Connection", Snackbar.LENGTH_INDEFINITE).show();
+                noConnection = true;
             }
 
             @Override
-            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                handler.obtainMessage(2, asyncActionToken.getTopics()[0]).sendToTarget();
+            public void onAvailable(Network network) {
+                if (noConnection)
+                    Snackbar.make(getView(), "Connected", Snackbar.LENGTH_SHORT).show();
+                //client.connect;
             }
         };
-        unsubscribeListener = new IMqttActionListener() {
-            @Override
-            public void onSuccess(IMqttToken asyncActionToken) {
-                handler.obtainMessage(3, asyncActionToken.getTopics()[0]).sendToTarget();
-            }
 
-            @Override
-            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                handler.obtainMessage(4).sendToTarget();
-            }
-        };
-        publishListener = new IMqttActionListener() {
-            @Override
-            public void onSuccess(IMqttToken asyncActionToken) {
-                handler.obtainMessage(5).sendToTarget();
-            }
+        handler = new MainHandler(topics, topicAdapter, tv, context.getApplicationContext());
 
-            @Override
-            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                handler.obtainMessage(6).sendToTarget();
-            }
-        };
         mqttCallback = new MqttCallbackExtended() {
             @Override
             public void connectComplete(boolean reconnect, String serverURI) {
@@ -207,7 +195,7 @@ public class MqttFragment extends Fragment {
             public void connectionLost(Throwable cause) {
                 handler.obtainMessage(8).sendToTarget(); // change status textview color to red
                 Log.e(MainActivity.TAG, "connectionLost");
-                MqttConnection.connect();
+                mqtt.connect();
             }
 
             @Override
@@ -221,6 +209,7 @@ public class MqttFragment extends Fragment {
                 Log.e(MainActivity.TAG, "deliveryComplete");
             }
         };
+        mqtt = new MqttConnection(handler);
     }
 
     @Override
@@ -242,7 +231,7 @@ public class MqttFragment extends Fragment {
             cond.name = "k8C/f/cond";
             ph.name = "k8C/f/ph";
             temp.name = "k8C/f/temp";
-            topics = new ArrayList<Topic>();
+            topics = new ArrayList<>();
             topics.add(cond);
             topics.add(ph);
             topics.add(temp);
@@ -259,13 +248,13 @@ public class MqttFragment extends Fragment {
     public void onStart() {
         super.onStart();
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
-        MqttConnection.initialize();
+        mqtt.initialize();
 //                option.setAutomaticReconnect(false);
 //                option.setMaxReconnectDelay(5);
         MqttConnection.client.setCallback(mqttCallback);
         //else client.reconnect(); // if has already been connected once, reconnect
 //                connectToken = client.connect(option, null, connectListener);
-        MqttConnection.connect();
+        mqtt.connect();
     }
 
     @Override
@@ -283,16 +272,13 @@ public class MqttFragment extends Fragment {
                 }
         } else {
             MqttConnection.client.setCallback(null);
-            MqttConnection.disconnect();
+            mqtt.disconnect();
         }
         super.onStop();
     }
 
     @Override
     public void onDestroy() {
-        publishListener = null;
-        subscribeListener = null;
-        unsubscribeListener = null;
         super.onDestroy();
     }
 
@@ -314,6 +300,9 @@ public class MqttFragment extends Fragment {
                 }
                 break;
             case R.id.unsubscribe:
+//                Topic topic = topics.get(position);
+//                topic.notify = false;
+//                topicAdapter.notifyDataSetChanged();
                 try {
                     MqttConnection.client.unsubscribe(topics.get(position).name, null, unsubscribeListener);
                 } catch (MqttException e) {

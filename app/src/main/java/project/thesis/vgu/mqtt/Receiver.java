@@ -20,8 +20,9 @@ public class Receiver extends BroadcastReceiver {
                 else context.startService(new Intent(context, MqttService.class));
             }
         } else {
+            MqttConnection mqtt = new MqttConnection();
             MqttConnection.client.setCallback(null);
-            MqttConnection.disconnect();
+            mqtt.disconnect();
             context.stopService(new Intent(context, MqttService.class)); // stop the MqttService
         }
     }

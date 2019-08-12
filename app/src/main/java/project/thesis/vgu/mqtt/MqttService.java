@@ -27,6 +27,7 @@ import androidx.core.app.NotificationManagerCompat;
 public class MqttService extends Service {
     Topic[] topics;
     PowerManager.WakeLock wakeLock;
+    MqttConnection mqtt;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -58,7 +59,8 @@ public class MqttService extends Service {
         }
         topics = topicList.toArray(new Topic[topicList.size()]);
 
-        MqttConnection.initialize(); // create client
+        mqtt = new MqttConnection();
+        mqtt.initialize(); // create client
         MqttConnection.client.setCallback(new MqttCallbackExtended() {
             boolean notify = false;
             float value;
@@ -97,7 +99,7 @@ public class MqttService extends Service {
             @Override
             public void connectionLost(Throwable cause) {
                 Log.e(MainActivity.TAG, "service connectionLost");
-                MqttConnection.connect();
+                mqtt.connect();
             }
 
             @Override
@@ -137,7 +139,7 @@ public class MqttService extends Service {
             public void deliveryComplete(IMqttDeliveryToken token) {
             }
         });
-        MqttConnection.connect();
+        mqtt.connect();
         return START_STICKY;
     }
 
