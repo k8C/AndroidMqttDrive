@@ -7,6 +7,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -119,7 +120,6 @@ public class MqttFragment extends Fragment {
 
             @Override
             public void deliveryComplete(IMqttDeliveryToken token) {
-                Log.e(MainActivity.TAG, "deliveryComplete");
             }
         };
         mqtt = new MqttConnection();
@@ -162,14 +162,17 @@ public class MqttFragment extends Fragment {
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
         if (notifyInBackground)
             notifyInBackground = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false);
-        if (notifyInBackground) { //service might be running
+        if (notifyInBackground) //service might be running
             context.stopService(new Intent(context, MqttService.class));
-        }
         MqttConnection.client.setCallback(mqttCallback);
         if (MqttConnection.client.isConnected()) {
             handler.subscribePersist(topics);
             handler.unsubscribePersist(topics);
-        } else mqtt.connect();
+            tv.setTextColor(0xffff4444);
+        } else {
+            mqtt.connect();
+            tv.setTextColor(0xff669900);
+        }
     }
 
     @Override
@@ -181,7 +184,7 @@ public class MqttFragment extends Fragment {
         if (notifyInBackground) {
             for (Topic topic : topics)
                 if (topic.notify) {
-                    if (MainActivity.atLeastOreo) // start ForeGround service in android Oreo and above
+                    if (Build.VERSION.SDK_INT >= 26) // start ForeGround service in android Oreo and above
                         context.startForegroundService(new Intent(context, MqttService.class));
                     else context.startService(new Intent(context, MqttService.class));
                     break;

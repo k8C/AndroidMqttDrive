@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
+import android.os.Build;
 import android.preference.PreferenceManager;
 
 // receiver for 'STOP' action button of MqttService foreground notification
@@ -15,7 +16,7 @@ public class Receiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
             if (PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false)) {
-                if (MainActivity.atLeastOreo) // start ForeGround service in android Oreo and above
+                if (Build.VERSION.SDK_INT >= 26) // start ForeGround service in android Oreo and above
                     context.startForegroundService(new Intent(context, MqttService.class));
                 else context.startService(new Intent(context, MqttService.class));
             }
