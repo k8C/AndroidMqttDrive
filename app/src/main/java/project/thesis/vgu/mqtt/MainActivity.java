@@ -52,7 +52,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        stopService(new Intent(this, MqttService.class));
     }
 
     @Override // Activity Recreated after configuration changed

@@ -15,7 +15,6 @@ import org.eclipse.paho.client.mqttv3.MqttException;
  */
 class MqttConnection {
     static MqttAsyncClient client;
-    MqttConnectOptions option;
     static IMqttToken connectToken;
     static boolean requestConnect;
 
@@ -24,6 +23,10 @@ class MqttConnection {
 
     void connect() {
         requestConnect = true;
+        final MqttConnectOptions option = new MqttConnectOptions();
+        option.setCleanSession(false);
+        option.setUserName("k8C");
+        option.setPassword("b19057d0daee4a4db05b4c0c1ed9166d".toCharArray());
         try {
             connectToken = client.connect(option, null, new IMqttActionListener() {
                 @Override
@@ -36,7 +39,6 @@ class MqttConnection {
                     Log.e(MainActivity.TAG, "connect fail");
                     SystemClock.sleep(5000);
                     try {
-//                            client.reconnect();
                         connectToken = client.connect(option, null, this);
                     } catch (MqttException e) {
                         Log.e(MainActivity.TAG, "reconnect exception " + e.getMessage());
@@ -51,21 +53,17 @@ class MqttConnection {
     }
 
     void initialize() {
-        if (client == null) {
+        if (client == null)
             try {
                 client = new MqttAsyncClient("tcp://io.adafruit.com:1883", "k8c53795cakn", null);
             } catch (MqttException e) {
                 Log.e(MainActivity.TAG, "constructor exception: " + e.getMessage());
                 e.printStackTrace();
             }
-            option = new MqttConnectOptions();
-            option.setCleanSession(false);
-            option.setUserName("k8C");
-            option.setPassword("b19057d0daee4a4db05b4c0c1ed9166d".toCharArray());
-        }
     }
 
     void disconnect() {
+        client.setCallback(null);
         requestConnect = false;
         try {
             client.disconnect(null, new IMqttActionListener() {

@@ -3,7 +3,6 @@ package project.thesis.vgu.mqtt;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -37,7 +36,6 @@ import com.google.gson.reflect.TypeToken;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
-import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -57,11 +55,10 @@ public class MqttFragment extends Fragment {
     List<Topic> topics;
     TopicAdapter topicAdapter;
     TextView tv; // mqtt server connection status
-    //    MqttAsyncClient client;
     MqttConnection mqtt;
     MainHandler handler;
     MqttCallbackExtended mqttCallback;
-    boolean notifyInBackground; // Options Menu setting for MqttService
+    boolean notifyInBackground = true; // Options Menu setting for MqttService
     Context context;
 
 
@@ -87,7 +84,6 @@ public class MqttFragment extends Fragment {
             public void onAvailable(Network network) {
                 if (noConnection)
                     Snackbar.make(getView(), "Connected", Snackbar.LENGTH_SHORT).show();
-                //client.connect;
             }
         };
 
@@ -98,23 +94,13 @@ public class MqttFragment extends Fragment {
                 handler.obtainMessage(7).sendToTarget(); // change status textview color to green
                 Log.e(MainActivity.TAG, "session present: " + MqttConnection.connectToken.getSessionPresent());
                 if (MqttConnection.connectToken.getSessionPresent()) {
-                    if (!handler.subscribeOk) {
-                        List<String> subscribeList = new ArrayList<>();
-                        for (Topic topic : topics)
-                            if (topic.isSubscribed && !topic.notify) subscribeList.add(topic.name);
-                        handler.subscribeMulti(subscribeList.toArray(new String[subscribeList.size()]));
-                    }
-                    if (!handler.unsubscribeOk) {
-                        List<String> unsubscribeList = new ArrayList<>();
-                        for (Topic topic : topics)
-                            if (!topic.isSubscribed && topic.notify) unsubscribeList.add(topic.name);
-                        handler.unsubscribeMulti(unsubscribeList.toArray(new String[unsubscribeList.size()]));
-                    }
+                    if (!handler.subscribeOk) handler.subscribePersist(topics);
+                    if (!handler.unsubscribeOk) handler.unsubscribePersist(topics);
                 } else {
                     List<String> subscribeList = new ArrayList<>();
-                    for (Topic topic : topics) // subscribe to all topics with isSubscribed = true
+                    for (Topic topic : topics) // subscribePersist to all topics with isSubscribed = true
                         if (topic.isSubscribed) subscribeList.add(topic.name);
-                    handler.subscribeMulti(subscribeList.toArray(new String[subscribeList.size()]));
+                    handler.subscribeNonPersist(subscribeList.toArray(new String[subscribeList.size()]));
                 }
             }
 
@@ -136,7 +122,6 @@ public class MqttFragment extends Fragment {
                 Log.e(MainActivity.TAG, "deliveryComplete");
             }
         };
-
         mqtt = new MqttConnection();
         mqtt.initialize();
     }
@@ -148,10 +133,8 @@ public class MqttFragment extends Fragment {
         //if (savedInstanceState != null) Log.e(MainActivity.TAG, "onCreateView savedInstanceState != null");
         View view = inflater.inflate(R.layout.fragment_mqtt, container, false);
         setHasOptionsMenu(true);
-        SharedPreferences appData = PreferenceManager.getDefaultSharedPreferences(context); // phone storage store list of topics and app settings
-        notifyInBackground = appData.getBoolean("notifyInBackground", false);
         tv = view.findViewById(R.id.tv);
-        String topicsJson = appData.getString("topics", null);
+        String topicsJson = PreferenceManager.getDefaultSharedPreferences(context).getString("topics", null);
         if (topicsJson != null)
             topics = new Gson().fromJson(topicsJson, new TypeToken<List<Topic>>() {
             }.getType());
@@ -177,19 +160,24 @@ public class MqttFragment extends Fragment {
     public void onStart() {
         super.onStart();
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
-//                option.setAutomaticReconnect(false);
-//                option.setMaxReconnectDelay(5);
+        if (notifyInBackground)
+            notifyInBackground = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false);
+        if (notifyInBackground) { //service might be running
+            context.stopService(new Intent(context, MqttService.class));
+        }
         MqttConnection.client.setCallback(mqttCallback);
-        //else client.reconnect(); // if has already been connected once, reconnect
-//                connectToken = client.connect(option, null, connectListener);
-        mqtt.connect();
+        if (MqttConnection.client.isConnected()) {
+            handler.subscribePersist(topics);
+            handler.unsubscribePersist(topics);
+        } else mqtt.connect();
     }
 
     @Override
     public void onStop() {
         Log.e(MainActivity.TAG, "MqttFragment onStop");
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).unregisterNetworkCallback(connectionCallback);
-        PreferenceManager.getDefaultSharedPreferences(context).edit().putString("topics", new Gson().toJson(topics)).apply();
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+                .putString("topics", new Gson().toJson(topics)).putBoolean("notifyInBackground", notifyInBackground).apply();
         if (notifyInBackground) {
             for (Topic topic : topics)
                 if (topic.notify) {
@@ -198,10 +186,9 @@ public class MqttFragment extends Fragment {
                     else context.startService(new Intent(context, MqttService.class));
                     break;
                 }
-        } else {
-            MqttConnection.client.setCallback(null);
-            mqtt.disconnect();
-        }
+            handler.subscribeOk = false;
+            handler.unsubscribeOk = false;
+        } else mqtt.disconnect();
         super.onStop();
     }
 
@@ -223,9 +210,6 @@ public class MqttFragment extends Fragment {
                 handler.subscribe(topics.get(position).name);
                 break;
             case R.id.unsubscribe:
-//                Topic topic = topics.get(position);
-//                topic.notify = false;
-//                topicAdapter.notifyDataSetChanged();
                 handler.unsubscribe(topics.get(position).name);
                 break;
         }
@@ -234,7 +218,6 @@ public class MqttFragment extends Fragment {
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        Log.e(MainActivity.TAG, "onCreateOptionsMenu");
         inflater.inflate(R.menu.menu_main, menu);
         menu.getItem(0).setChecked(notifyInBackground);
     }
@@ -246,7 +229,6 @@ public class MqttFragment extends Fragment {
         if (id == R.id.service_setting) {
             notifyInBackground = !item.isChecked();
             item.setChecked(notifyInBackground);
-            PreferenceManager.getDefaultSharedPreferences(context).edit().putBoolean("notifyInBackground", notifyInBackground).apply();
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -370,7 +352,7 @@ public class MqttFragment extends Fragment {
         WeakReference<TopicAdapter> topicAdapterReference;
         WeakReference<TextView> tvReference;
         Context context;
-        boolean subscribeOk, unsubscribeOk;
+        boolean subscribeOk = false, unsubscribeOk = false;
 
         public MainHandler(List<Topic> tp, TopicAdapter ta, TextView tv, Context ct) {
             topics = tp;
@@ -458,7 +440,7 @@ public class MqttFragment extends Fragment {
                     }
                 });
             } catch (MqttException e) {
-                Log.e(MainActivity.TAG, "subscribe exception: " + e.getMessage());
+                Log.e(MainActivity.TAG, "subscribePersist exception: " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -501,7 +483,7 @@ public class MqttFragment extends Fragment {
             }
         }
 
-        void subscribeMulti(String[] topics) {
+        void subscribeNonPersist(String[] topics) {
             int[] qos = new int[topics.length];
             Arrays.fill(qos, 1);
             try {
@@ -509,7 +491,7 @@ public class MqttFragment extends Fragment {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
                         subscribeOk = true;
-                        Log.e(MainActivity.TAG, "subscribeMulti success ");
+                        Log.e(MainActivity.TAG, "subscribeNonPersist success ");
                     }
 
                     @Override
@@ -518,34 +500,52 @@ public class MqttFragment extends Fragment {
                             subscribeOk = true;
                             obtainMessage(9, asyncActionToken.getTopics()).sendToTarget();
                         } else subscribeOk = false;
-                        Log.e(MainActivity.TAG, "subscribeMulti fail " + e.getMessage());
+                        Log.e(MainActivity.TAG, "subscribeNonPersist fail " + e.getMessage());
                     }
                 });
             } catch (MqttException e) {
                 subscribeOk = false;
-                Log.e(MainActivity.TAG, "subscribeMulti exception " + e.getMessage());
+                Log.e(MainActivity.TAG, "subscribeNonPersist exception " + e.getMessage());
                 e.printStackTrace();
             }
         }
 
-        void unsubscribeMulti(String[] topics) {
+        void subscribePersist(List<Topic> topics) {
+            List<String> subscribeList = new ArrayList<>();
+            for (Topic topic : topics)
+                if (topic.isSubscribed && !topic.notify) subscribeList.add(topic.name);
+            if (subscribeList.size() == 0) {
+                subscribeOk = true;
+                return;
+            }
+            subscribeNonPersist(subscribeList.toArray(new String[subscribeList.size()]));
+        }
+
+        void unsubscribePersist(List<Topic> topics) {
+            List<String> unsubscribeList = new ArrayList<>();
+            for (Topic topic : topics)
+                if (!topic.isSubscribed && topic.notify) unsubscribeList.add(topic.name);
+            if (unsubscribeList.size() == 0) {
+                unsubscribeOk = true;
+                return;
+            }
             try {
-                MqttConnection.client.unsubscribe(topics, null, new IMqttActionListener() {
+                MqttConnection.client.unsubscribe(unsubscribeList.toArray(new String[unsubscribeList.size()]), null, new IMqttActionListener() {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
                         unsubscribeOk = true;
-                        Log.e(MainActivity.TAG, "unsubscribeMulti success ");
+                        Log.e(MainActivity.TAG, "unsubscribePersist success ");
                     }
 
                     @Override
                     public void onFailure(IMqttToken asyncActionToken, Throwable e) {
                         unsubscribeOk = MqttConnection.client.isConnected();
-                        Log.e(MainActivity.TAG, "unsubscribeMulti fail " + e.getMessage());
+                        Log.e(MainActivity.TAG, "unsubscribePersist fail " + e.getMessage());
                     }
                 });
             } catch (MqttException e) {
                 unsubscribeOk = false;
-                Log.e(MainActivity.TAG, "unsubscribeMulti exception " + e.getMessage());
+                Log.e(MainActivity.TAG, "unsubscribePersist exception " + e.getMessage());
                 e.printStackTrace();
             }
         }
