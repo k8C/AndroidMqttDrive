@@ -37,12 +37,14 @@ import com.google.gson.reflect.TypeToken;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import androidx.appcompat.app.AlertDialog;
@@ -64,80 +66,6 @@ public class MqttFragment extends Fragment {
 
 
     public MqttFragment() {
-    }
-
-    static class MainHandler extends Handler {
-        List<Topic> topics;
-        WeakReference<TopicAdapter> topicAdapterReference;
-        WeakReference<TextView> tvReference;
-        Context context;
-
-        public MainHandler(List<Topic> tp, TopicAdapter ta, TextView tv, Context ct) {
-            topics = tp;
-            topicAdapterReference = new WeakReference<>(ta);
-            tvReference = new WeakReference<>(tv);
-            context = ct;
-        }
-
-        void changeStatus(String topicName, boolean status) {
-            for (Topic topic : topics)
-                if (topic.name.equals(topicName)) {
-                    topic.isSubscribed = status;
-                    topicAdapterReference.get().notifyDataSetChanged();
-                    break;
-                }
-        }
-
-        @Override
-        public void handleMessage(Message msg) {
-            TextView tv = tvReference.get();
-            if (tv != null) {
-                TopicAdapter topicAdapter = topicAdapterReference.get();
-                switch (msg.what) {
-                    case 0:
-                        String[] data = (String[]) msg.obj;
-                        for (Topic topic : topics)
-                            if (topic.name.equals(data[0])) {
-                                topic.value = data[1];
-                                topicAdapter.notifyDataSetChanged();
-                                if (topic.notify && ((topic.max != null && topic.max < Float.parseFloat(data[1]))
-                                        || (topic.min != null && topic.min > Float.parseFloat(data[1]))))
-                                    NotificationManagerCompat.from(context).notify(1, new NotificationCompat.Builder(context, "mqttTopic")
-                                            .setPriority(NotificationCompat.PRIORITY_MAX).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                                            .setSmallIcon(R.drawable.app2).setContentTitle("WARNING Topic ".concat(data[0])).build());
-                                break;
-                            }
-                        break;
-                    case 1:
-                        changeStatus((String) msg.obj, true);
-                        break;
-                    case 2:
-                        String topicName = (String) msg.obj;
-                        changeStatus(topicName, false);
-                        Toast.makeText(context, "Subscribe failed to ".concat(topicName), Toast.LENGTH_SHORT).show();
-                        break;
-                    case 3:
-                        changeStatus((String) msg.obj, false);
-                        break;
-                    case 4:
-                        Toast.makeText(context, "Unsubscribe failed", Toast.LENGTH_SHORT).show();
-                        break;
-                    case 5:
-                        Toast.makeText(context, "Published successfully", Toast.LENGTH_SHORT).show();
-                        break;
-                    case 6:
-                        Toast.makeText(context, "Publish failed", Toast.LENGTH_SHORT).show();
-                        break;
-                    case 7:
-                        tv.setTextColor(0xff669900); //0xff669900,0xff99cc00 - red
-                        Log.e(MainActivity.TAG, "session present: " + MqttConnection.connectToken.getSessionPresent());
-                        break;
-                    case 8:
-                        tv.setTextColor(0xffff4444); //0xffcc0000,0xffff4444 - green
-                        break;
-                }
-            }
-        }
     }
 
     @Override
@@ -163,31 +91,30 @@ public class MqttFragment extends Fragment {
             }
         };
 
-        handler = new MainHandler(topics, topicAdapter, tv, context.getApplicationContext());
-
         mqttCallback = new MqttCallbackExtended() {
             @Override
             public void connectComplete(boolean reconnect, String serverURI) {
                 Log.e(MainActivity.TAG, "connectComplete");
                 handler.obtainMessage(7).sendToTarget(); // change status textview color to green
-                try {
+                Log.e(MainActivity.TAG, "session present: " + MqttConnection.connectToken.getSessionPresent());
+                if (MqttConnection.connectToken.getSessionPresent()) {
+                    if (!handler.subscribeOk) {
+                        List<String> subscribeList = new ArrayList<>();
+                        for (Topic topic : topics)
+                            if (topic.isSubscribed && !topic.notify) subscribeList.add(topic.name);
+                        handler.subscribeMulti(subscribeList.toArray(new String[subscribeList.size()]));
+                    }
+                    if (!handler.unsubscribeOk) {
+                        List<String> unsubscribeList = new ArrayList<>();
+                        for (Topic topic : topics)
+                            if (!topic.isSubscribed && topic.notify) unsubscribeList.add(topic.name);
+                        handler.unsubscribeMulti(unsubscribeList.toArray(new String[unsubscribeList.size()]));
+                    }
+                } else {
+                    List<String> subscribeList = new ArrayList<>();
                     for (Topic topic : topics) // subscribe to all topics with isSubscribed = true
-                        if (topic.isSubscribed) {
-                            Log.e(MainActivity.TAG, "subscribe again");
-                            MqttConnection.client.subscribe(topic.name, 1, null, new IMqttActionListener() {
-                                @Override
-                                public void onSuccess(IMqttToken asyncActionToken) {
-                                }
-
-                                @Override
-                                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                                    handler.obtainMessage(2, asyncActionToken.getTopics()[0]).sendToTarget(); // topic status icon color red
-                                }
-                            });
-                        }
-                } catch (MqttException e) {
-                    Log.e(MainActivity.TAG, "subscribe mqttException: " + e.getMessage());
-                    e.printStackTrace();
+                        if (topic.isSubscribed) subscribeList.add(topic.name);
+                    handler.subscribeMulti(subscribeList.toArray(new String[subscribeList.size()]));
                 }
             }
 
@@ -209,7 +136,9 @@ public class MqttFragment extends Fragment {
                 Log.e(MainActivity.TAG, "deliveryComplete");
             }
         };
-        mqtt = new MqttConnection(handler);
+        handler = new MainHandler(topics, topicAdapter, tv, context.getApplicationContext());
+        mqtt = new MqttConnection();
+        mqtt.initialize();
     }
 
     @Override
@@ -248,7 +177,6 @@ public class MqttFragment extends Fragment {
     public void onStart() {
         super.onStart();
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
-        mqtt.initialize();
 //                option.setAutomaticReconnect(false);
 //                option.setMaxReconnectDelay(5);
         MqttConnection.client.setCallback(mqttCallback);
@@ -292,23 +220,13 @@ public class MqttFragment extends Fragment {
         int position = ((AdapterView.AdapterContextMenuInfo) item.getMenuInfo()).position;
         switch (item.getItemId()) {
             case R.id.subscribe:
-                try {
-                    MqttConnection.client.subscribe(topics.get(position).name, 1, null, subscribeListener);
-                } catch (MqttException e) {
-                    Log.e(MainActivity.TAG, "subscribe exception");
-                    e.printStackTrace();
-                }
+                handler.subscribe(topics.get(position).name);
                 break;
             case R.id.unsubscribe:
 //                Topic topic = topics.get(position);
 //                topic.notify = false;
 //                topicAdapter.notifyDataSetChanged();
-                try {
-                    MqttConnection.client.unsubscribe(topics.get(position).name, null, unsubscribeListener);
-                } catch (MqttException e) {
-                    Log.e(MainActivity.TAG, "unsubscribe exception");
-                    e.printStackTrace();
-                }
+                handler.unsubscribe(topics.get(position).name);
                 break;
         }
         return super.onContextItemSelected(item);
@@ -377,12 +295,8 @@ public class MqttFragment extends Fragment {
                                 .setPositiveButton("Publish", new DialogInterface.OnClickListener() {
                                     @Override
                                     public void onClick(DialogInterface dialog, int which) {
-                                        try {
-                                            MqttConnection.client.publish(topics.get(number).name, ((EditText) publishDialog.findViewById(R.id.publishText)).getText().toString().getBytes(), 1, ((CheckBox) publishDialog.findViewById(R.id.retain)).isChecked(), null, publishListener);
-                                        } catch (MqttException e) {
-                                            Log.e(MainActivity.TAG, "publish exception");
-                                            e.printStackTrace();
-                                        }
+                                        handler.publish(topics.get(number).name, ((EditText) publishDialog.findViewById(R.id.publishText)).getText().toString().getBytes(),
+                                                ((CheckBox) publishDialog.findViewById(R.id.retain)).isChecked());
                                     }
                                 }).show();
                     }
@@ -448,6 +362,192 @@ public class MqttFragment extends Fragment {
             View statusIcon;
             ImageButton publishButton, settingButton;
             ToggleButton toggleBell;
+        }
+    }
+
+    static class MainHandler extends Handler {
+        List<Topic> topics;
+        WeakReference<TopicAdapter> topicAdapterReference;
+        WeakReference<TextView> tvReference;
+        Context context;
+        boolean subscribeOk, unsubscribeOk;
+
+        public MainHandler(List<Topic> tp, TopicAdapter ta, TextView tv, Context ct) {
+            topics = tp;
+            topicAdapterReference = new WeakReference<>(ta);
+            tvReference = new WeakReference<>(tv);
+            context = ct;
+        }
+
+        void changeStatus(String topicName, boolean status) {
+            for (Topic topic : topics)
+                if (topic.name.equals(topicName)) {
+                    topic.isSubscribed = status;
+                    topicAdapterReference.get().notifyDataSetChanged();
+                    break;
+                }
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            TextView tv = tvReference.get();
+            if (tv != null) {
+                TopicAdapter topicAdapter = topicAdapterReference.get();
+                switch (msg.what) {
+                    case 0:
+                        String[] data = (String[]) msg.obj;
+                        for (Topic topic : topics)
+                            if (topic.name.equals(data[0])) {
+                                topic.value = data[1];
+                                topicAdapter.notifyDataSetChanged();
+                                if (topic.notify && ((topic.max != null && topic.max < Float.parseFloat(data[1]))
+                                        || (topic.min != null && topic.min > Float.parseFloat(data[1]))))
+                                    NotificationManagerCompat.from(context).notify(1, new NotificationCompat.Builder(context, "mqttTopic")
+                                            .setPriority(NotificationCompat.PRIORITY_MAX).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                                            .setSmallIcon(R.drawable.app2).setContentTitle("WARNING Topic ".concat(data[0])).build());
+                                break;
+                            }
+                        break;
+                    case 1:
+                        changeStatus((String) msg.obj, true);
+                        break;
+                    case 2:
+                        String topicName = (String) msg.obj;
+                        changeStatus(topicName, false);
+                        Toast.makeText(context, "Subscribe failed to ".concat(topicName), Toast.LENGTH_SHORT).show();
+                        break;
+                    case 3:
+                        changeStatus((String) msg.obj, false);
+                        break;
+                    case 4:
+                        Toast.makeText(context, "Unsubscribe failed", Toast.LENGTH_SHORT).show();
+                        break;
+                    case 5:
+                        Toast.makeText(context, "Published successfully", Toast.LENGTH_SHORT).show();
+                        break;
+                    case 6:
+                        Toast.makeText(context, "Publish failed", Toast.LENGTH_SHORT).show();
+                        break;
+                    case 7:
+                        tv.setTextColor(0xff669900); //0xff669900,0xff99cc00 - red
+                        break;
+                    case 8:
+                        tv.setTextColor(0xffff4444); //0xffcc0000,0xffff4444 - green
+                        break;
+                    case 9:
+                        List<String> topicNames = Arrays.asList((String[]) msg.obj);
+                        for (Topic topic : topics)
+                            if (topicNames.contains(topic.name)) topic.isSubscribed = false;
+                        topicAdapterReference.get().notifyDataSetChanged();
+                        break;
+                }
+            }
+        }
+
+        void subscribe(String topic) {
+            try {
+                MqttConnection.client.subscribe(topic, 1, null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        obtainMessage(1, asyncActionToken.getTopics()[0]).sendToTarget();
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                        obtainMessage(2, asyncActionToken.getTopics()[0]).sendToTarget();
+                    }
+                });
+            } catch (MqttException e) {
+                Log.e(MainActivity.TAG, "subscribe exception: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        void unsubscribe(String topic) {
+            try {
+                MqttConnection.client.unsubscribe(topic, null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        obtainMessage(3, asyncActionToken.getTopics()[0]).sendToTarget();
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                        obtainMessage(4).sendToTarget();
+                    }
+                });
+            } catch (MqttException e) {
+                Log.e(MainActivity.TAG, "unsubscribe exception: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        void publish(String topic, byte[] message, boolean retain) {
+            try {
+                MqttConnection.client.publish(topic, message, 1, retain, null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        obtainMessage(5).sendToTarget();
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                        obtainMessage(6).sendToTarget();
+                    }
+                });
+            } catch (MqttException e) {
+                Log.e(MainActivity.TAG, "publish exception: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        void subscribeMulti(String[] topics) {
+            int[] qos = new int[topics.length];
+            Arrays.fill(qos, 1);
+            try {
+                MqttConnection.client.subscribe(topics, qos, null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        subscribeOk = true;
+                        Log.e(MainActivity.TAG, "subscribeMulti success ");
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable e) {
+                        if (MqttConnection.client.isConnected()) {
+                            subscribeOk = true;
+                            obtainMessage(9, asyncActionToken.getTopics()).sendToTarget();
+                        } else subscribeOk = false;
+                        Log.e(MainActivity.TAG, "subscribeMulti fail " + e.getMessage());
+                    }
+                });
+            } catch (MqttException e) {
+                subscribeOk = false;
+                Log.e(MainActivity.TAG, "subscribeMulti exception " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        void unsubscribeMulti(String[] topics) {
+            try {
+                MqttConnection.client.unsubscribe(topics, null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        unsubscribeOk = true;
+                        Log.e(MainActivity.TAG, "unsubscribeMulti success ");
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable e) {
+                        unsubscribeOk = MqttConnection.client.isConnected();
+                        Log.e(MainActivity.TAG, "unsubscribeMulti fail " + e.getMessage());
+                    }
+                });
+            } catch (MqttException e) {
+                unsubscribeOk = false;
+                Log.e(MainActivity.TAG, "unsubscribeMulti exception " + e.getMessage());
+                e.printStackTrace();
+            }
         }
     }
 }

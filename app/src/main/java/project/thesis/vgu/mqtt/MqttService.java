@@ -19,15 +19,20 @@ import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 public class MqttService extends Service {
-    Topic[] topics;
+    //    Topic[] topics;
+    List<Topic> topics;
     PowerManager.WakeLock wakeLock;
     MqttConnection mqtt;
+    Action action;
+
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -49,17 +54,18 @@ public class MqttService extends Service {
         }
         wakeLock = ((PowerManager) getSystemService(Context.POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mqtt::k8c");
         wakeLock.acquire(); // used to ensure the service is not suspended when the Android device is sleeping
-        List<Topic> topicList = new Gson().fromJson(topicsJson, new TypeToken<List<Topic>>() {
+        topics = new Gson().fromJson(topicsJson, new TypeToken<List<Topic>>() {
         }.getType());
-        for (int i = 0; i < topicList.size(); i++) {
+        /*for (int i = 0; i < topicList.size(); i++) {
             if (!topicList.get(i).notify) {
                 topicList.remove(i);
                 i--;
             }
         }
-        topics = topicList.toArray(new Topic[topicList.size()]);
+        topics = topicList.toArray(new Topic[topicList.size()]);*/
 
         mqtt = new MqttConnection();
+        action = new Action();
         mqtt.initialize(); // create client
         MqttConnection.client.setCallback(new MqttCallbackExtended() {
             boolean notify = false;
@@ -70,29 +76,24 @@ public class MqttService extends Service {
             @Override
             public void connectComplete(boolean reconnect, String serverURI) { // when connected, subscribe to all topics
                 Log.e(MainActivity.TAG, "service connectComplete");
-                try {
-                    for (Topic topic : topics) {
-                        MqttConnection.client.subscribe(topic.name, 1, null, new IMqttActionListener() {
-                            @Override
-                            public void onSuccess(IMqttToken asyncActionToken) {
-                                Log.e(MainActivity.TAG, "Subscribe Success To " + asyncActionToken.getTopics()[0]);
-                            }
-
-                            @Override
-                            public void onFailure(IMqttToken asyncActionToken, Throwable exception) { // re-subscribe if fail
-                                Log.e(MainActivity.TAG, "Subscribe Fail, Retrying");
-                                try {
-                                    MqttConnection.client.subscribe(asyncActionToken.getTopics()[0], 1, null, this);
-                                } catch (MqttException e) {
-                                    Log.e(MainActivity.TAG, "Exception Why Retrying To Subscribe");
-                                    e.printStackTrace();
-                                }
-                            }
-                        });
+                if (MqttConnection.connectToken.getSessionPresent()) {
+                    if (!action.subscribeOk) {
+                        List<String> subscribeList = new ArrayList<>();
+                        for (Topic topic : topics)
+                            if (!topic.isSubscribed && topic.notify) subscribeList.add(topic.name);
+                        action.subscribeMulti(subscribeList.toArray(new String[subscribeList.size()]));
                     }
-                } catch (MqttException e) {
-                    Log.e(MainActivity.TAG, "subscribe mqttException: " + e.getMessage());
-                    e.printStackTrace();
+                    if (!action.unsubscribeOk) {
+                        List<String> unsubscribeList = new ArrayList<>();
+                        for (Topic topic : topics)
+                            if (topic.isSubscribed && !topic.notify) unsubscribeList.add(topic.name);
+                        action.unsubscribeMulti(unsubscribeList.toArray(new String[unsubscribeList.size()]));
+                    }
+                } else {
+                    List<String> subscribeList = new ArrayList<>();
+                    for (Topic topic : topics) // subscribe to all topics with notify = true
+                        if (topic.notify) subscribeList.add(topic.name);
+                    action.subscribeMulti(subscribeList.toArray(new String[subscribeList.size()]));
                 }
             }
 
@@ -147,5 +148,55 @@ public class MqttService extends Service {
     public void onDestroy() {
         Log.e(MainActivity.TAG, "service onDestroy");
         wakeLock.release(); // release wakelock to allow the cpu to sleep
+    }
+
+    static class Action {
+        boolean subscribeOk, unsubscribeOk;
+
+        void subscribeMulti(String[] topics) {
+            int[] qos = new int[topics.length];
+            Arrays.fill(qos, 1);
+            try {
+                MqttConnection.client.subscribe(topics, qos, null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        subscribeOk = true;
+                        Log.e(MainActivity.TAG, "subscribeMulti success ");
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable e) {
+                        subscribeOk = MqttConnection.client.isConnected();
+                        Log.e(MainActivity.TAG, "subscribeMulti fail " + e.getMessage());
+                    }
+                });
+            } catch (MqttException e) {
+                subscribeOk = false;
+                Log.e(MainActivity.TAG, "subscribeMulti exception " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        void unsubscribeMulti(String[] topics) {
+            try {
+                MqttConnection.client.unsubscribe(topics, null, new IMqttActionListener() {
+                    @Override
+                    public void onSuccess(IMqttToken asyncActionToken) {
+                        unsubscribeOk = true;
+                        Log.e(MainActivity.TAG, "unsubscribeMulti success ");
+                    }
+
+                    @Override
+                    public void onFailure(IMqttToken asyncActionToken, Throwable e) {
+                        unsubscribeOk = MqttConnection.client.isConnected();
+                        Log.e(MainActivity.TAG, "unsubscribeMulti fail " + e.getMessage());
+                    }
+                });
+            } catch (MqttException e) {
+                unsubscribeOk = false;
+                Log.e(MainActivity.TAG, "unsubscribeMulti exception " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
     }
 }
