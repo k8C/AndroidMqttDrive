@@ -77,18 +77,8 @@ public class MqttService extends Service {
             public void connectComplete(boolean reconnect, String serverURI) { // when connected, subscribe to all topics
                 Log.e(MainActivity.TAG, "service connectComplete");
                 if (MqttConnection.connectToken.getSessionPresent()) {
-                    if (!action.subscribeOk) {
-                        List<String> subscribeList = new ArrayList<>();
-                        for (Topic topic : topics)
-                            if (!topic.isSubscribed && topic.notify) subscribeList.add(topic.name);
-                        action.subscribeMulti(subscribeList.toArray(new String[subscribeList.size()]));
-                    }
-                    if (!action.unsubscribeOk) {
-                        List<String> unsubscribeList = new ArrayList<>();
-                        for (Topic topic : topics)
-                            if (topic.isSubscribed && !topic.notify) unsubscribeList.add(topic.name);
-                        action.unsubscribeMulti(unsubscribeList.toArray(new String[unsubscribeList.size()]));
-                    }
+                    if (!action.subscribeOk) action.subscribe(topics);
+                    if (!action.unsubscribeOk) action.unsubscribeMulti(topics);
                 } else {
                     List<String> subscribeList = new ArrayList<>();
                     for (Topic topic : topics) // subscribe to all topics with notify = true
@@ -140,7 +130,9 @@ public class MqttService extends Service {
             public void deliveryComplete(IMqttDeliveryToken token) {
             }
         });
-        mqtt.connect();
+        if (MqttConnection.client.isConnected()) {
+            action.subscribe(topics); action.unsubscribeMulti(topics);
+        } else mqtt.connect();
         return START_STICKY;
     }
 
@@ -151,13 +143,13 @@ public class MqttService extends Service {
     }
 
     static class Action {
-        boolean subscribeOk, unsubscribeOk;
+        boolean subscribeOk = false, unsubscribeOk = false;
 
-        void subscribeMulti(String[] topics) {
-            int[] qos = new int[topics.length];
+        void subscribeMulti(String[] topicNames) {
+            int[] qos = new int[topicNames.length];
             Arrays.fill(qos, 1);
             try {
-                MqttConnection.client.subscribe(topics, qos, null, new IMqttActionListener() {
+                MqttConnection.client.subscribe(topicNames, qos, null, new IMqttActionListener() {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
                         subscribeOk = true;
@@ -177,9 +169,19 @@ public class MqttService extends Service {
             }
         }
 
-        void unsubscribeMulti(String[] topics) {
+        void subscribe(List<Topic> topics) {
+            List<String> list = new ArrayList<>();
+            for (Topic topic : topics)
+                if (!topic.isSubscribed && topic.notify) list.add(topic.name);
+            subscribeMulti(list.toArray(new String[list.size()]));
+        }
+
+        void unsubscribeMulti(List<Topic> topics) {
+            List<String> list = new ArrayList<>();
+            for (Topic topic : topics)
+                if (topic.isSubscribed && !topic.notify) list.add(topic.name);
             try {
-                MqttConnection.client.unsubscribe(topics, null, new IMqttActionListener() {
+                MqttConnection.client.unsubscribe(list.toArray(new String[list.size()]), null, new IMqttActionListener() {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
                         unsubscribeOk = true;

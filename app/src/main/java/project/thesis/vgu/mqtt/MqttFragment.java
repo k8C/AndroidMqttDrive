@@ -136,7 +136,7 @@ public class MqttFragment extends Fragment {
                 Log.e(MainActivity.TAG, "deliveryComplete");
             }
         };
-        handler = new MainHandler(topics, topicAdapter, tv, context.getApplicationContext());
+
         mqtt = new MqttConnection();
         mqtt.initialize();
     }
@@ -165,11 +165,11 @@ public class MqttFragment extends Fragment {
             topics.add(ph);
             topics.add(temp);
         }
-
         ListView listView = view.findViewById(R.id.list);
         topicAdapter = new TopicAdapter();
         listView.setAdapter(topicAdapter);
         registerForContextMenu(listView);
+        handler = new MainHandler(topics, topicAdapter, tv, context.getApplicationContext());
         return view;
     }
 
