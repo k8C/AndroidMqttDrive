@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="project.thesis.vgu.mqtt" >
+    package="k8C.mqtt" >
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -17,7 +17,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" >
         <activity
-            android:name=".MainActivity"
+            android:name="k8C.mqtt.MainActivity"
             android:configChanges="orientation|screenSize|layoutDirection|fontScale|locale|uiMode|keyboard|screenLayout|smallestScreenSize|touchscreen|mcc|mnc|density|keyboardHidden|navigation"
             android:label="MQTT"
             android:launchMode="singleTask" >
@@ -30,10 +30,10 @@
 
         <!-- <service android:name="org.eclipse.paho.android.service.MqttService" /> -->
         <service
-            android:name=".MqttService" />
+            android:name="k8C.mqtt.MqttService" />
         <!--android:process=":mqttService"-->
 
-        <receiver android:name=".Receiver" >
+        <receiver android:name="k8C.mqtt.Receiver" >
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>

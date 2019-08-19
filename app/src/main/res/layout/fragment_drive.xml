@@ -8,7 +8,7 @@
         android:layout_height="match_parent"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        tools:context="project.thesis.vgu.drive.DriveFragment">
+        tools:context="k8C.thesis.vgu.drive.DriveFragment">
 
         <TextView
             android:layout_width="wrap_content"
