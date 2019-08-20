@@ -93,7 +93,7 @@ public class MqttFragment extends Fragment {
             public void connectComplete(boolean reconnect, String serverURI) {
                 Log.e(MainActivity.TAG, "connectComplete");
                 handler.obtainMessage(7).sendToTarget(); // change status textview color to green
-                Log.e(MainActivity.TAG, "session present: " + MQTT.connectToken.getSessionPresent());
+                Log.e(MainActivity.TAG, "session present: " + MQTT.sessionPresent);
                 mqtt.connectComplete(topics);
             }
 
@@ -501,14 +501,12 @@ public class MqttFragment extends Fragment {
 
         @Override
         void buildSubsribeList(List<String> subscribeList, List<Topic> topics) {
-            for (Topic topic : topics)
-                if (topic.isSubscribed && !topic.notify) subscribeList.add(topic.name);
+            super.buildUnsubscribeList(subscribeList, topics);
         }
 
         @Override
         void buildUnsubscribeList(List<String> unsubscribeList, List<Topic> topics) {
-            for (Topic topic : topics)
-                if (!topic.isSubscribed && topic.notify) unsubscribeList.add(topic.name);
+            super.buildSubsribeList(unsubscribeList, topics);
         }
     }
 }
