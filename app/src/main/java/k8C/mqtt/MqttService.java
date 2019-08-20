@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 package k8C.mqtt;
 
 import android.app.PendingIntent;
@@ -14,7 +13,6 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.IMqttToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
@@ -24,7 +22,6 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 public class MqttService extends Service {
-    //    Topic[] topics;
     List<Topic> topics;
     PowerManager.WakeLock wakeLock;
     MQTT mqtt;
@@ -52,13 +49,6 @@ public class MqttService extends Service {
         wakeLock.acquire(); // used to ensure the service is not suspended when the Android device is sleeping
         topics = new Gson().fromJson(topicsJson, new TypeToken<List<Topic>>() {
         }.getType());
-        /*for (int i = 0; i < topicList.size(); i++) {
-            if (!topicList.get(i).notify) {
-                topicList.remove(i);
-                i--;
-            }
-        }
-        topics = topicList.toArray(new Topic[topicList.size()]);*/
 
         mqtt = new MQTT();
         mqtt.initialize(); // create client
@@ -130,29 +120,3 @@ public class MqttService extends Service {
         wakeLock.release(); // release wakelock to allow the cpu to sleep
     }
 }
-=======
-package k8C.mqtt;
-
-import android.app.PendingIntent;
-import android.app.Service;
-import android.content.Context;
-import android.content.Intent;
-import android.os.IBinder;
-import android.os.PowerManager;
-import android.preference.PreferenceManager;
-import android.util.Log;
-
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.IMqttToken;
-import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
-
-import java.util.List;
-
-import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
-
->>>>>>> github/thesis
