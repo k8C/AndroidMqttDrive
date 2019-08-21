@@ -66,9 +66,9 @@ class MQTT {
         }
     }
 
-    static void disconnect() {
+    static void disconnect() { // remove reference to Activity or Service and disconnect
         client.setCallback(null);
-        isConnecting = false;
+        isConnecting = false; // stop reconnecting
         try {
             client.disconnect(null, new IMqttActionListener() {
                 @Override
