@@ -26,7 +26,6 @@ public class MqttService extends Service {
     PowerManager.WakeLock wakeLock;
     MQTT mqtt;
 
-
     @Override
     public IBinder onBind(Intent intent) {
         return null;
@@ -34,24 +33,25 @@ public class MqttService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String topicsJson = PreferenceManager.getDefaultSharedPreferences(this).getString("topics", null);
-        // foreground notification always show in status bar, indicate that the background service always running, required in android Oreo and above
+        // foreground notification always show in status bar, indicate that the Notification Service always running
         startForeground(1, new NotificationCompat.Builder(this, "service")
                 .addAction(0, "STOP", PendingIntent.getBroadcast(this, 0, new Intent(this, Receiver.class), 0))
                 .setPriority(NotificationCompat.PRIORITY_LOW).setVisibility(NotificationCompat.VISIBILITY_SECRET)
-                .setSmallIcon(R.drawable.app2).setContentTitle("MQTT service is running").build());
+                .setSmallIcon(R.drawable.app1).setContentTitle("MQTT service is running").build());
+        // get topics data from storage
+        String topicsJson = PreferenceManager.getDefaultSharedPreferences(this).getString("topics", null);
         if (topicsJson == null) {
             stopSelf();
             Log.e(MainActivity.TAG, "no data to process, service terminated");
             return START_NOT_STICKY;
         }
-        wakeLock = ((PowerManager) getSystemService(Context.POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mqtt::k8c");
-        wakeLock.acquire(); // used to ensure the service is not suspended when the Android device is sleeping
         topics = new Gson().fromJson(topicsJson, new TypeToken<List<Topic>>() {
         }.getType());
-
+        // wakelock is used to ensure the service is not suspended when the Android device is sleeping
+        wakeLock = ((PowerManager) getSystemService(Context.POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mqtt::k8c");
+        wakeLock.acquire();
         mqtt = new MQTT();
-        mqtt.initialize(); // create client
+        mqtt.initialize();
         MQTT.client.setCallback(new MqttCallbackExtended() {
             boolean notify = false;
             float value;
@@ -59,7 +59,7 @@ public class MqttService extends Service {
             int i;
 
             @Override
-            public void connectComplete(boolean reconnect, String serverURI) { // when connected, subscribePersist to all topics
+            public void connectComplete(boolean reconnect, String serverURI) {
                 Log.e(MainActivity.TAG, "service connectComplete");
                 mqtt.connectComplete(topics);
             }
@@ -108,9 +108,9 @@ public class MqttService extends Service {
             }
         });
         if (MQTT.client.isConnected()) {
-            mqtt.subscribePersist(topics);
-            mqtt.unsubscribePersist(topics);
-        } else MQTT.connect();
+            mqtt.subscribePersist(topics); //subscribe to all topics with notify=true and isSubscribed=false
+            mqtt.unsubscribePersist(topics); //unsubscribe to all topics with notify=false and isSubscribed=true
+        } else if(!MQTT.isConnecting) MQTT.connect();
         return START_STICKY;
     }
 

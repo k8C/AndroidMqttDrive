@@ -16,11 +16,11 @@ import java.util.List;
  * Created by AnhKhoaChu on 8/9/2019.
  */
 class MQTT {
-    static MqttAsyncClient client;
-    static boolean sessionPresent, requestConnect;
+    static MqttAsyncClient client; // common client for both the Activity and the Notification Service
+    static boolean sessionPresent, isConnecting = false;
     boolean subscribeOk = false, unsubscribeOk = false;
 
-    void initialize() {
+    void initialize() { // create new client if not exists to connect to mqtt server
         if (client == null)
             try {
                 client = new MqttAsyncClient("tcp://io.adafruit.com:1883", "k8c53795cakn", null);
@@ -30,9 +30,9 @@ class MQTT {
             }
     }
 
-    static void connect() {
-        requestConnect = true;
-        final MqttConnectOptions option = new MqttConnectOptions();
+    static void connect() { // connect to server, reconnect if failed
+        isConnecting = true; // sometimes while disconnecting, a new connect request will fail
+        final MqttConnectOptions option = new MqttConnectOptions(); // prepare data for the connection
         option.setCleanSession(false);
         option.setUserName("k8C");
         option.setPassword("b19057d0daee4a4db05b4c0c1ed9166d".toCharArray());
@@ -41,22 +41,23 @@ class MQTT {
                 @Override
                 public void onSuccess(IMqttToken asyncActionToken) {
                     sessionPresent = asyncActionToken.getSessionPresent();
-                    Log.e(MainActivity.TAG, "connect success");
+                    Log.e(MainActivity.TAG, "connect success, session present: " + sessionPresent);
                 }
 
                 @Override
                 public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
                     Log.e(MainActivity.TAG, "connect fail");
                     try {
-                        Thread.sleep(7654, 3210);
+                        Thread.sleep(7654, 321);
                     } catch (InterruptedException e) {
                     }
-                    try {
-                        client.connect(option, null, this);
-                    } catch (MqttException e) {
-                        Log.e(MainActivity.TAG, "reconnect exception " + e.getMessage());
-                        e.printStackTrace();
-                    }
+                    if (isConnecting)
+                        try {
+                            client.connect(option, null, this);
+                        } catch (MqttException e) {
+                            Log.e(MainActivity.TAG, "reconnect exception " + e.getMessage());
+                            e.printStackTrace();
+                        }
                 }
             });
         } catch (MqttException e) {
@@ -67,13 +68,13 @@ class MQTT {
 
     static void disconnect() {
         client.setCallback(null);
-        requestConnect = false;
+        isConnecting = false;
         try {
             client.disconnect(null, new IMqttActionListener() {
                 @Override
                 public void onSuccess(IMqttToken asyncActionToken) {
                     Log.e(MainActivity.TAG, "disconnect success");
-                    if (requestConnect) connect();
+                    if (isConnecting) connect();
                 }
 
                 @Override
@@ -161,7 +162,7 @@ class MQTT {
     }
 
     void buildSubsribeListNonPersist(List<String> subscribeList, List<Topic> topics) {
-        for (Topic topic : topics) // subscribePersist to all topics with notify = true
+        for (Topic topic : topics) // subscribe to all topics with notify = true
             if (topic.notify) subscribeList.add(topic.name);
     }
 

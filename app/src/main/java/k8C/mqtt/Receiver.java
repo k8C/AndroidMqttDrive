@@ -11,13 +11,13 @@ public class Receiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
+        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) { // run when Android finished BOOT
             if (PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false)) {
-                if (Build.VERSION.SDK_INT >= 26) // start ForeGround service in android Oreo and above
+                if (Build.VERSION.SDK_INT >= 26) // start the mqtt Notification service
                     context.startForegroundService(new Intent(context, MqttService.class));
                 else context.startService(new Intent(context, MqttService.class));
             }
-        } else {
+        } else { // the STOP label on the Foreground Notification is clicked
             MQTT.disconnect();
             PreferenceManager.getDefaultSharedPreferences(context).edit().putBoolean("notifyInBackground", false).apply();
             context.stopService(new Intent(context, MqttService.class)); // stop the MqttService

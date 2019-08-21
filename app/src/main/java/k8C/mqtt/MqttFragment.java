@@ -55,13 +55,12 @@ public class MqttFragment extends Fragment {
     ConnectivityManager.NetworkCallback connectionCallback; // callback for network connected/disconnected
     List<Topic> topics;
     TopicAdapter topicAdapter;
-    TextView tv; // mqtt server connection status
+    TextView connectionText; // mqtt server connection status
     MQTT mqtt;
-    MainHandler handler;
+    MainHandler handler; // handle messages from the mqtt client thread
     MqttCallbackExtended mqttCallback;
     boolean notifyInBackground = true; // Options Menu setting for MqttService
     Context context;
-
 
     public MqttFragment() {
     }
@@ -70,7 +69,6 @@ public class MqttFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         //setRetainInstance(true); //retain variables across configchanges, onCreate and onDestroy not called
-        Log.e(MainActivity.TAG, "MqttFragment onCreate");
         context = getContext();
         connectionCallback = new ConnectivityManager.NetworkCallback() {
             boolean noConnection = false;
@@ -87,19 +85,17 @@ public class MqttFragment extends Fragment {
                     Snackbar.make(getView(), "Connected", Snackbar.LENGTH_SHORT).show();
             }
         };
-
         mqttCallback = new MqttCallbackExtended() {
             @Override
             public void connectComplete(boolean reconnect, String serverURI) {
                 Log.e(MainActivity.TAG, "connectComplete");
-                handler.obtainMessage(7).sendToTarget(); // change status textview color to green
-                Log.e(MainActivity.TAG, "session present: " + MQTT.sessionPresent);
+                handler.obtainMessage(7).sendToTarget(); // change status text color to green
                 mqtt.connectComplete(topics);
             }
 
             @Override
             public void connectionLost(Throwable cause) {
-                handler.obtainMessage(8).sendToTarget(); // change status textview color to red
+                handler.obtainMessage(8).sendToTarget(); // change status text color to red
                 Log.e(MainActivity.TAG, "connectionLost");
                 MQTT.connect();
             }
@@ -121,11 +117,9 @@ public class MqttFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        Log.e(MainActivity.TAG, "MqttFragment onCreateView");
-        //if (savedInstanceState != null) Log.e(MainActivity.TAG, "onCreateView savedInstanceState != null");
         View view = inflater.inflate(R.layout.fragment_mqtt, container, false);
         setHasOptionsMenu(true);
-        tv = view.findViewById(R.id.tv);
+        connectionText = view.findViewById(R.id.tv);
         String topicsJson = PreferenceManager.getDefaultSharedPreferences(context).getString("topics", null);
         if (topicsJson != null)
             topics = new Gson().fromJson(topicsJson, new TypeToken<List<Topic>>() {
@@ -144,26 +138,26 @@ public class MqttFragment extends Fragment {
         topicAdapter = new TopicAdapter();
         listView.setAdapter(topicAdapter);
         registerForContextMenu(listView);
-        handler = new MainHandler(topics, topicAdapter, tv, context.getApplicationContext());
+        handler = new MainHandler(topics, topicAdapter, connectionText, context.getApplicationContext());
         return view;
     }
 
     @Override
     public void onStart() {
         super.onStart();
+        MQTT.client.setCallback(mqttCallback);
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
         if (notifyInBackground)
             notifyInBackground = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false);
         if (notifyInBackground) //service might be running
             context.stopService(new Intent(context, MqttService.class));
-        MQTT.client.setCallback(mqttCallback);
         if (MQTT.client.isConnected()) {
-            mqtt.subscribePersist(topics);
-            mqtt.unsubscribePersist(topics);
-            tv.setTextColor(0xff669900);
+            mqtt.subscribePersist(topics); //subscribe to all topics with notify=false and isSubscribed=true
+            mqtt.unsubscribePersist(topics); //unsubscribe to all topics with notify=true and isSubscribed=false
+            connectionText.setTextColor(0xff669900); // green
         } else {
-            MQTT.connect();
-            tv.setTextColor(0xffff4444);
+            if(!MQTT.isConnecting) MQTT.connect();
+            connectionText.setTextColor(0xffff4444); // red
         }
     }
 
@@ -171,12 +165,13 @@ public class MqttFragment extends Fragment {
     public void onStop() {
         Log.e(MainActivity.TAG, "MqttFragment onStop");
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).unregisterNetworkCallback(connectionCallback);
+        // store topics data and Background Notification setting to storage
         PreferenceManager.getDefaultSharedPreferences(context).edit()
                 .putString("topics", new Gson().toJson(topics)).putBoolean("notifyInBackground", notifyInBackground).apply();
-        if (notifyInBackground) {
+        if (notifyInBackground) {// start mqtt service
             for (Topic topic : topics)
                 if (topic.notify) {
-                    if (Build.VERSION.SDK_INT >= 26) // start ForeGround service in android Oreo and above
+                    if (Build.VERSION.SDK_INT >= 26)
                         context.startForegroundService(new Intent(context, MqttService.class));
                     else context.startService(new Intent(context, MqttService.class));
                     break;
@@ -405,10 +400,10 @@ public class MqttFragment extends Fragment {
                         Toast.makeText(context, "Publish failed", Toast.LENGTH_SHORT).show();
                         break;
                     case 7:
-                        tv.setTextColor(0xff669900); //0xff669900,0xff99cc00 - red
+                        tv.setTextColor(0xff669900); //0xff669900,0xff99cc00 - green
                         break;
                     case 8:
-                        tv.setTextColor(0xffff4444); //0xffcc0000,0xffff4444 - green
+                        tv.setTextColor(0xffff4444); //0xffcc0000,0xffff4444 - red
                         break;
                     case 9:
                         List<String> topicNames = Arrays.asList((String[]) msg.obj);
@@ -487,7 +482,7 @@ public class MqttFragment extends Fragment {
 
         @Override
         void buildSubsribeListNonPersist(List<String> subscribeList, List<Topic> topics) {
-            for (Topic topic : topics) // subscribePersist to all topics with isSubscribed = true
+            for (Topic topic : topics) // list of all topics with isSubcribed=true
                 if (topic.isSubscribed) subscribeList.add(topic.name);
         }
 
