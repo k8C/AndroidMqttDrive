@@ -28,10 +28,8 @@
             </intent-filter>
         </activity>
 
-        <!-- <service android:name="org.eclipse.paho.android.service.MqttService" /> -->
         <service
             android:name="k8C.mqtt.MqttService" />
-        <!--android:process=":mqttService"-->
 
         <receiver android:name="k8C.mqtt.Receiver" >
             <intent-filter>
