@@ -142,7 +142,7 @@ public class MqttFragment extends Fragment {
     public void onStart() {
         super.onStart();
         MQTT.client.setCallback(mqttCallback);
-		noConnection = true;
+	noConnection = true;
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
         if (notifyInBackground)
             notifyInBackground = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false);
