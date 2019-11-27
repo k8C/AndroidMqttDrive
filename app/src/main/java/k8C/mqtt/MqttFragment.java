@@ -52,14 +52,14 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.fragment.app.Fragment;
 
 public class MqttFragment extends Fragment {
-    ConnectivityManager.NetworkCallback connectionCallback; // callback for network connected/disconnected
+    ConnectivityManager.NetworkCallback connectionCallback; //callback for network connected/disconnected
     List<Topic> topics;
     TopicAdapter topicAdapter;
-    TextView connectionText; // mqtt server connection status
+    TextView connectionText; //mqtt server connection status
     MQTT mqtt;
-    MainHandler handler; // handle messages from the mqtt client thread
+    MainHandler handler; //handle messages from the mqtt client thread
     MqttCallbackExtended mqttCallback;
-    boolean notifyInBackground = true; // Options Menu setting for MqttService
+    boolean noConnection, notifyInBackground = true; //Options Menu setting for MqttService
     Context context;
 
     public MqttFragment() {
@@ -68,11 +68,8 @@ public class MqttFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        //setRetainInstance(true); //retain variables across configchanges, onCreate and onDestroy not called
         context = getContext();
         connectionCallback = new ConnectivityManager.NetworkCallback() {
-            boolean firstTime;
-
             @Override
             public void onLost(Network network) {
                 Snackbar.make(getView(), "No Connection", Snackbar.LENGTH_INDEFINITE).show();
@@ -80,7 +77,7 @@ public class MqttFragment extends Fragment {
 
             @Override
             public void onAvailable(Network network) {
-                if (firstTime) firstTime = false;
+                if (noConnection) noConnection = false;
                 else Snackbar.make(getView(), "Connected", Snackbar.LENGTH_SHORT).show();
             }
         };
@@ -145,7 +142,7 @@ public class MqttFragment extends Fragment {
     public void onStart() {
         super.onStart();
         MQTT.client.setCallback(mqttCallback);
-		connectionCallback.firstTime = true;
+		noConnection = true;
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
         if (notifyInBackground)
             notifyInBackground = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false);
