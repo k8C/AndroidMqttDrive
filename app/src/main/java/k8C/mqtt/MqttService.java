@@ -33,12 +33,12 @@ public class MqttService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // foreground notification always show in status bar, indicate that the Notification Service always running
+        //foreground notification always show in status bar, indicate that the Notification Service always running
         startForeground(1, new NotificationCompat.Builder(this, "service")
                 .addAction(0, "STOP", PendingIntent.getBroadcast(this, 0, new Intent(this, Receiver.class), 0))
                 .setPriority(NotificationCompat.PRIORITY_LOW).setVisibility(NotificationCompat.VISIBILITY_SECRET)
                 .setSmallIcon(R.drawable.app1).setContentTitle("MQTT service is running").build());
-        // get topics data from storage
+        //get topics data from storage
         String topicsJson = PreferenceManager.getDefaultSharedPreferences(this).getString("topics", null);
         if (topicsJson == null) {
             stopSelf();
@@ -47,7 +47,7 @@ public class MqttService extends Service {
         }
         topics = new Gson().fromJson(topicsJson, new TypeToken<List<Topic>>() {
         }.getType());
-        // wakelock is used to ensure the service is not suspended when the Android device is sleeping
+        //wakelock is used to ensure the service is not suspended when the Android device is sleeping
         wakeLock = ((PowerManager) getSystemService(Context.POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mqtt::k8c");
         wakeLock.acquire();
         mqtt = new MQTT();
@@ -117,6 +117,6 @@ public class MqttService extends Service {
     @Override
     public void onDestroy() {
         Log.e(MainActivity.TAG, "service onDestroy");
-        wakeLock.release(); // release wakelock to allow the cpu to sleep
+        wakeLock.release(); //release wakelock to allow the cpu to sleep
     }
 }

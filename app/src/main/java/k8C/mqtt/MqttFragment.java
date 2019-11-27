@@ -71,18 +71,17 @@ public class MqttFragment extends Fragment {
         //setRetainInstance(true); //retain variables across configchanges, onCreate and onDestroy not called
         context = getContext();
         connectionCallback = new ConnectivityManager.NetworkCallback() {
-            boolean noConnection = false;
+            boolean firstTime;
 
             @Override
             public void onLost(Network network) {
                 Snackbar.make(getView(), "No Connection", Snackbar.LENGTH_INDEFINITE).show();
-                noConnection = true;
             }
 
             @Override
             public void onAvailable(Network network) {
-                if (noConnection)
-                    Snackbar.make(getView(), "Connected", Snackbar.LENGTH_SHORT).show();
+                if (firstTime) firstTime = false;
+                else Snackbar.make(getView(), "Connected", Snackbar.LENGTH_SHORT).show();
             }
         };
         mqttCallback = new MqttCallbackExtended() {
@@ -146,6 +145,7 @@ public class MqttFragment extends Fragment {
     public void onStart() {
         super.onStart();
         MQTT.client.setCallback(mqttCallback);
+		connectionCallback.firstTime = true;
         ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), connectionCallback);
         if (notifyInBackground)
             notifyInBackground = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("notifyInBackground", false);
@@ -180,11 +180,6 @@ public class MqttFragment extends Fragment {
             mqtt.unsubscribeOk = false;
         } else MQTT.disconnect();
         super.onStop();
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
     }
 
     @Override
@@ -505,8 +500,3 @@ public class MqttFragment extends Fragment {
         }
     }
 }
-/*connectionReceiver = new BroadcastReceiver() {@Override
-            public void onReceive(Context context, Intent intent) {
-                NetworkInfo ni = ((ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE)).getActiveNetworkInfo();
-                if (ni != null && ni.isConnected()) {}}};
-          registerReceiver(connectionReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));*/
